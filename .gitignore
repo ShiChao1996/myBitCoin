@@ -1,0 +1,11 @@
+# editor
+.vscode
+.idea
+*/.idea
+*.log
+.DS_Store
+*/.DS_Store
+development/*
+*.xml
+*.xml
+.idea/workspace.xml

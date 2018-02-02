@@ -24,33 +24,96 @@
 
 /*
  * Revision History:
- *     Initial: 2018/01/31        shichao
+ *     Initial: 2018/02/02        ShiChao
  */
 
-package main
+package cli
 
 import (
+	"flag"
+	"os"
+	"fmt"
+	"strconv"
 	blk "myBitCoin/block"
-	"myBitCoin/cli"
 )
 
-func main() {
-	/*bc := blk.NewBlockChain()
-	bc.AddBlock("hello world")
+const usage = `
+Usage:
+  addblock -data BLOCK_DATA    add a block to the blockchain
+  printchain                   print all the blocks of the blockchain
+`
 
-	for _, block := range bc.Blocks {
+type Client struct {
+	Bc *blk.BlockChain
+}
+
+func (cli *Client) printUsage() {
+	fmt.Println(usage)
+}
+
+func (cli *Client) validateArgs() {
+	if len(os.Args) < 2 {
+		cli.printUsage()
+		os.Exit(1)
+	}
+}
+
+func (cli *Client) Run() {
+	cli.validateArgs()
+
+	var err error
+	addBlockCmd := flag.NewFlagSet("addblock", flag.ExitOnError)
+	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	addBlockData := addBlockCmd.String("data", "", "Block data")
+
+	switch os.Args[1] {
+	case "addblock":
+		err = addBlockCmd.Parse(os.Args[2:])
+	case "printchain":
+		err = printChainCmd.Parse(os.Args[2:])
+	default:
+		cli.printUsage()
+		os.Exit(1)
+	}
+
+	if err != nil {
+		os.Exit(1)
+		return
+	}
+	if addBlockCmd.Parsed() {
+		if *addBlockData == "" {
+			addBlockCmd.Usage()
+			os.Exit(1)
+		}
+		cli.addBlock(*addBlockData)
+	}
+
+	if printChainCmd.Parsed() {
+		cli.printChain()
+	}
+
+}
+
+func (cli *Client) addBlock(data string) {
+	cli.Bc.AddBlock(data)
+	fmt.Println("Success!")
+}
+
+func (cli *Client) printChain() {
+	bci := cli.Bc.Iterator()
+
+	for {
+		block := bci.Next()
+
 		fmt.Printf("Prev. hash: %x\n", block.PrevHash)
 		fmt.Printf("Data: %s\n", block.Data)
 		fmt.Printf("Hash: %x\n", block.Hash)
-		fmt.Println()
 		pow := blk.NewProofOfWork(block)
 		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
 		fmt.Println()
-	}*/
 
-	bc := blk.NewBlockChain()
-	defer bc.DB.Close()
-
-	cli := cli.Client{bc}
-	cli.Run()
+		if len(block.PrevHash) == 0 {
+			break
+		}
+	}
 }

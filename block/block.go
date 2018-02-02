@@ -74,6 +74,6 @@ func (b *Block) Serialize() []byte {
 func DeSerialize(b []byte) *Block {
 	var block *Block
 	decoder := gob.NewDecoder(bytes.NewReader(b))
-	decoder.Decode(block)
+	decoder.Decode(&block)
 	return block
 }
