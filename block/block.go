@@ -33,14 +33,17 @@ import (
 	"time"
 	"encoding/gob"
 	"bytes"
+	"myBitCoin/transaction"
+	"crypto/sha256"
 )
 
 type Block struct {
 	TimeStamp int64
 	PrevHash  []byte
-	Data      []byte
-	Hash      []byte
-	Nonce     int
+	//Data      []byte
+	Transactions []*transaction.Transaction
+	Hash         []byte
+	Nonce        int
 }
 
 /*
@@ -51,8 +54,8 @@ func (b *Block) SetHash() {
 	b.Hash = hash[:]
 }*/
 
-func NewBlock(data string, prevHash []byte) *Block {
-	b := &Block{time.Now().Unix(), prevHash, []byte(data), []byte{}, 0}
+func NewBlock(transactions []*transaction.Transaction, prevHash []byte) *Block {
+	b := &Block{time.Now().Unix(), prevHash, transactions, []byte{}, 0}
 	pow := NewProofOfWork(b)
 	nonce, hash := pow.Run()
 	b.Hash = hash
@@ -60,8 +63,8 @@ func NewBlock(data string, prevHash []byte) *Block {
 	return b
 }
 
-func NewGenesisBlock() *Block {
-	return NewBlock("Genesis block", []byte{})
+func NewGenesisBlock(coinbase *transaction.Transaction) *Block {
+	return NewBlock([]*transaction.Transaction{coinbase}, []byte{})
 }
 
 func (b *Block) Serialize() []byte {
@@ -76,4 +79,18 @@ func DeSerialize(b []byte) *Block {
 	decoder := gob.NewDecoder(bytes.NewReader(b))
 	decoder.Decode(&block)
 	return block
+}
+
+func (b *Block) HashTransactions() []byte {
+	var (
+		tr     [][]byte
+		hashed [32]byte
+	)
+
+	for _, t := range b.Transactions {
+		tr = append(tr, t.ID)
+	}
+	hashed = sha256.Sum256(bytes.Join(tr, []byte{}))
+
+	return hashed[:]
 }

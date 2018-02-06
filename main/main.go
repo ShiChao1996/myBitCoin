@@ -30,27 +30,10 @@
 package main
 
 import (
-	blk "myBitCoin/block"
 	"myBitCoin/cli"
 )
 
 func main() {
-	/*bc := blk.NewBlockChain()
-	bc.AddBlock("hello world")
-
-	for _, block := range bc.Blocks {
-		fmt.Printf("Prev. hash: %x\n", block.PrevHash)
-		fmt.Printf("Data: %s\n", block.Data)
-		fmt.Printf("Hash: %x\n", block.Hash)
-		fmt.Println()
-		pow := blk.NewProofOfWork(block)
-		fmt.Printf("PoW: %s\n", strconv.FormatBool(pow.Validate()))
-		fmt.Println()
-	}*/
-
-	bc := blk.NewBlockChain()
-	defer bc.DB.Close()
-
-	cli := cli.Client{bc}
+	cli := cli.Client{}
 	cli.Run()
 }
