@@ -36,6 +36,7 @@ import (
 	"log"
 	"strconv"
 	blk "myBitCoin/block"
+	"myBitCoin/transaction"
 )
 
 const usage = `
@@ -169,7 +170,7 @@ func (cli *Client) Run() {
 			os.Exit(1)
 		}
 
-		//cli.send(*sendFrom, *sendTo, *sendAmount)
+		cli.Send(*sendFrom, *sendTo, *sendAmount)
 	}
 }
 
@@ -211,4 +212,13 @@ func (cli *Client) getBalance(address string) {
 	}
 
 	fmt.Printf("Balance of '%s': %d\n", address, balance)
+}
+
+func (cli *Client) Send(from, to string, amount int) {
+	bc := blk.NewBlockChain(from)
+	defer bc.DB.Close()
+
+	tx := bc.NewUTXOTransaction(from, to, amount)
+	bc.AddBlock([]*transaction.Transaction{tx})
+	fmt.Println("Success!")
 }

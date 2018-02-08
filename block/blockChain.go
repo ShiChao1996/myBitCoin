@@ -190,6 +190,28 @@ func (c *BlockChain) FindUTXO(address string) []transaction.TxOutput {
 	return outputs
 }
 
+func (c *BlockChain) FindSpendableOutputs(addr string, amount int) (int, map[string][]int) {
+	unspendOutputs := make(map[string][]int)
+	accumulation := 0
+	unspentTr := c.FindUnspentTransactions(addr)
+
+Find:
+	for _, tx := range unspentTr {
+		txID := hex.EncodeToString(tx.ID)
+		for outIdx, out := range tx.Vout {
+			if out.CanBeUnlockedWith(addr) && accumulation < amount {
+				unspendOutputs[txID] = append(unspendOutputs[txID], outIdx)
+				accumulation += out.Value
+			}
+			if accumulation >= amount {
+				break Find
+			}
+		}
+	}
+
+	return accumulation, unspendOutputs
+}
+
 func (c *BlockChain) Iterator() *BlockchainIterator {
 	return &BlockchainIterator{c.tip, c.DB}
 }
@@ -211,4 +233,33 @@ func (i *BlockchainIterator) Next() *Block {
 	})
 	i.currentHash = block.PrevHash
 	return block
+}
+
+func (c *BlockChain) NewUTXOTransaction(from, to string, amount int) *transaction.Transaction {
+	var (
+		outputs []transaction.TxOutput
+		inputs  []transaction.TxInput
+	)
+	acc, validOuts := c.FindSpendableOutputs(from, amount)
+	if acc < amount {
+		log.Panic("ERROR: Not enough funds")
+	}
+
+	for id, outs := range validOuts {
+		txID, _ := hex.DecodeString(id)
+
+		for _, out := range outs {
+			input := transaction.TxInput{txID, out, from}
+			inputs = append(inputs, input)
+		}
+	}
+	outputs = append(outputs, transaction.TxOutput{amount, to})
+	if acc > amount {
+		delta := acc - amount
+		outputs = append(outputs, transaction.TxOutput{delta, from})
+	}
+
+	tx := &transaction.Transaction{nil, inputs, outputs}
+	tx.SetID()
+	return tx
 }
