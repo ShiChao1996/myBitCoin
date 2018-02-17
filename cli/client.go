@@ -37,6 +37,7 @@ import (
 	"strconv"
 	blk "myBitCoin/block"
 	"myBitCoin/transaction"
+	"myBitCoin/wallet"
 )
 
 const usage = `
@@ -60,9 +61,9 @@ func (cli *Client) validateArgs() {
 	}
 }
 
-func (cli *Client) createBlockchain(address string) {
+func (cli *Client) createBlockchain(address, nodeID string) {
 	fmt.Println("creating blockchain...")
-	bc := blk.CreateBlockChain(address)
+	bc := blk.CreateBlockChain(address, nodeID)
 	bc.DB.Close()
 	fmt.Println("Done!")
 }
@@ -107,10 +108,18 @@ func (cli *Client) Run() {
 func (cli *Client) Run() {
 	cli.validateArgs()
 
+	//nodeID := os.Getenv("NODE_ID")
+	nodeID := os.Getenv("GOPATH")
+	if nodeID == "" {
+		fmt.Printf("NODE_ID env. var is not set!")
+		os.Exit(1)
+	}
+
 	getBalanceCmd := flag.NewFlagSet("getbalance", flag.ExitOnError)
 	createBlockchainCmd := flag.NewFlagSet("createblockchain", flag.ExitOnError)
 	sendCmd := flag.NewFlagSet("send", flag.ExitOnError)
 	printChainCmd := flag.NewFlagSet("printchain", flag.ExitOnError)
+	createWalletCmd := flag.NewFlagSet("createwallet", flag.ExitOnError)
 
 	getBalanceAddress := getBalanceCmd.String("address", "", "The address to get balance for")
 	createBlockchainAddress := createBlockchainCmd.String("address", "", "The address to send genesis block reward to")
@@ -126,6 +135,11 @@ func (cli *Client) Run() {
 		}
 	case "createblockchain":
 		err := createBlockchainCmd.Parse(os.Args[2:])
+		if err != nil {
+			log.Panic(err)
+		}
+	case "createwallet":
+		err := createWalletCmd.Parse(os.Args[2:])
 		if err != nil {
 			log.Panic(err)
 		}
@@ -149,7 +163,7 @@ func (cli *Client) Run() {
 			getBalanceCmd.Usage()
 			os.Exit(1)
 		}
-		cli.getBalance(*getBalanceAddress)
+		cli.getBalance(*getBalanceAddress, nodeID)
 	}
 
 	if createBlockchainCmd.Parsed() {
@@ -157,11 +171,11 @@ func (cli *Client) Run() {
 			createBlockchainCmd.Usage()
 			os.Exit(1)
 		}
-		cli.createBlockchain(*createBlockchainAddress)
+		cli.createBlockchain(*createBlockchainAddress, nodeID)
 	}
 
 	if printChainCmd.Parsed() {
-		cli.printChain()
+		cli.printChain(nodeID)
 	}
 
 	if sendCmd.Parsed() {
@@ -170,7 +184,11 @@ func (cli *Client) Run() {
 			os.Exit(1)
 		}
 
-		cli.Send(*sendFrom, *sendTo, *sendAmount)
+		cli.Send(*sendFrom, *sendTo, nodeID, *sendAmount)
+	}
+
+	if createWalletCmd.Parsed() {
+		cli.createWallet(nodeID)
 	}
 }
 
@@ -179,8 +197,8 @@ func (cli *Client) addBlock(data string) {
 	fmt.Println("Success!")
 }
 
-func (cli *Client) printChain() {
-	bc := blk.NewBlockChain("")
+func (cli *Client) printChain(nodeID string) {
+	bc := blk.NewBlockChain(nodeID)
 	defer bc.DB.Close()
 	bci := bc.Iterator()
 
@@ -200,12 +218,17 @@ func (cli *Client) printChain() {
 	}
 }
 
-func (cli *Client) getBalance(address string) {
-	bc := blk.NewBlockChain(address)
+func (cli *Client) getBalance(address, nodeID string) {
+	if !wallet.ValidateAddress(address) {
+		log.Panic("Error: Address is not valid !")
+	}
+	bc := blk.NewBlockChain(nodeID)
 	defer bc.DB.Close()
 
 	balance := 0
-	UTXOs := bc.FindUTXO(address)
+	pubKeyHash := wallet.Base58Decode([]byte(address))
+	pubKeyHash = pubKeyHash[1: len(pubKeyHash)-4]
+	UTXOs := bc.FindUTXO(pubKeyHash)
 
 	for _, out := range UTXOs {
 		balance += out.Value
@@ -214,11 +237,33 @@ func (cli *Client) getBalance(address string) {
 	fmt.Printf("Balance of '%s': %d\n", address, balance)
 }
 
-func (cli *Client) Send(from, to string, amount int) {
-	bc := blk.NewBlockChain(from)
+func (cli *Client) Send(from, to, nodeID string, amount int) {
+	if !wallet.ValidateAddress(from) {
+		log.Panic("ERROR: Sender address is not valid")
+	}
+	if !wallet.ValidateAddress(to) {
+		log.Panic("ERROR: Recipient address is not valid")
+	}
+
+	bc := blk.NewBlockChain(nodeID)
 	defer bc.DB.Close()
 
-	tx := bc.NewUTXOTransaction(from, to, amount)
+	wallets, err := wallet.NewWallets(nodeID)
+	if err != nil {
+		log.Panic(err)
+	}
+	wlt := wallets.GetWallet(from)
+	tx := bc.NewUTXOTransaction(wlt, to, amount)
+
 	bc.AddBlock([]*transaction.Transaction{tx})
 	fmt.Println("Success!")
+}
+
+func (cli *Client) createWallet(nodeID string) {
+	wallets, _ := wallet.NewWallets(nodeID)
+	address := wallets.CreateWallet()
+	fmt.Println("nodeID: " + nodeID)
+	wallets.SaveToFile(nodeID)
+
+	fmt.Printf("Your new address: %s\n", address)
 }
