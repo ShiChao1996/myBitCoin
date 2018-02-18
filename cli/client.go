@@ -38,6 +38,7 @@ import (
 	blk "myBitCoin/block"
 	"myBitCoin/transaction"
 	"myBitCoin/wallet"
+	"myBitCoin/utxo"
 )
 
 const usage = `
@@ -228,7 +229,8 @@ func (cli *Client) getBalance(address, nodeID string) {
 	balance := 0
 	pubKeyHash := wallet.Base58Decode([]byte(address))
 	pubKeyHash = pubKeyHash[1: len(pubKeyHash)-4]
-	UTXOs := bc.FindUTXO(pubKeyHash)
+	utxoSet := utxo.UTXOSet{bc}
+	UTXOs := utxoSet.FindUTXO(pubKeyHash)
 
 	for _, out := range UTXOs {
 		balance += out.Value

@@ -204,7 +204,7 @@ func (c *BlockChain) FindUnspentTransactions(pubKeyHash []byte) []transaction.Tr
 	return unspentTXs
 }
 
-func (c *BlockChain) FindUTXO(pubKeyHash []byte) []transaction.TxOutput {
+/*func (c *BlockChain) FindUTXO(pubKeyHash []byte) []transaction.TxOutput {
 	unspentTxs := c.FindUnspentTransactions(pubKeyHash)
 	var outputs []transaction.TxOutput
 	for _, tx := range unspentTxs {
@@ -215,8 +215,50 @@ func (c *BlockChain) FindUTXO(pubKeyHash []byte) []transaction.TxOutput {
 		}
 	}
 	return outputs
-}
+}*/
+// FindUTXO finds all unspent transaction outputs and returns transactions with spent outputs removed
+func (bc *BlockChain) FindUTXO() map[string]transaction.TxOutPuts {
+	UTXO := make(map[string]transaction.TxOutPuts)
+	spentTXOs := make(map[string][]int)
+	bci := bc.Iterator()
 
+	for {
+		block := bci.Next()
+
+		for _, tx := range block.Transactions {
+			txID := hex.EncodeToString(tx.ID)
+
+		Outputs:
+			for outIdx, out := range tx.Vout {
+				// Was the output spent?
+				if spentTXOs[txID] != nil {
+					for _, spentOutIdx := range spentTXOs[txID] {
+						if spentOutIdx == outIdx {
+							continue Outputs
+						}
+					}
+				}
+
+				outs := UTXO[txID]
+				outs.Outputs = append(outs.Outputs, out)
+				UTXO[txID] = outs
+			}
+
+			if tx.IsCoinbase() == false {
+				for _, in := range tx.Vin {
+					inTxID := hex.EncodeToString(in.TxID)
+					spentTXOs[inTxID] = append(spentTXOs[inTxID], in.Vout)
+				}
+			}
+		}
+
+		if len(block.PrevHash) == 0 {
+			break
+		}
+	}
+
+	return UTXO
+}
 
 func (c *BlockChain) FindSpendableOutputs(pubKeyHash []byte, amount int) (int, map[string][]int) {
 	unspendOutputs := make(map[string][]int)
@@ -310,4 +352,19 @@ func (bc *BlockChain)SignTransactions(tx transaction.Transaction, private ecdsa.
 	}
 
 	tx.Sign(private,prevTxs)
+}
+
+func (bc *BlockChain) VerifyTransaction(tr *transaction.Transaction)bool {
+	prevTxs := make(map[string]transaction.Transaction)
+
+	for _,in := range tr.Vin{
+		prev,err := bc.FindTransaction(in.TxID)
+		if err != nil{
+			log.Panic(err)
+		}
+		id := hex.EncodeToString(in.TxID)
+		prevTxs[id] = prev
+	}
+
+	return tr.Verify(prevTxs)
 }

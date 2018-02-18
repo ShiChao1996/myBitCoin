@@ -39,6 +39,8 @@ import (
 	"myBitCoin/wallet"
 	"crypto/ecdsa"
 	"encoding/hex"
+	"crypto/elliptic"
+	"math/big"
 )
 
 const subsidy = 10
@@ -135,7 +137,7 @@ func (tr *Transaction) Sign(privKey ecdsa.PrivateKey, txs map[string]Transaction
 	}
 
 	txCopy := tr.TrimmedCopy()
-	for inID,in := range txCopy.Vin{
+	for inID, in := range txCopy.Vin {
 		prevTx := txs[hex.EncodeToString(in.TxID)]
 		txCopy.Vin[inID].Signature = nil
 		txCopy.Vin[inID].PubKey = prevTx.Vout[in.Vout].PubKeyHash
@@ -167,4 +169,75 @@ func (tr *Transaction) TrimmedCopy() Transaction {
 	}
 
 	return Transaction{tr.ID, inputs, outputs}
+}
+
+// Verify verifies signatures of Transaction inputs
+func (tx *Transaction) Verify(prevTXs map[string]Transaction) bool {
+	if tx.IsCoinbase() {
+		return true
+	}
+
+	for _, vin := range tx.Vin {
+		if prevTXs[hex.EncodeToString(vin.TxID)].ID == nil {
+			log.Panic("ERROR: Previous transaction is not correct")
+		}
+	}
+
+	txCopy := tx.TrimmedCopy()
+	curve := elliptic.P256()
+
+	for inID, vin := range tx.Vin {
+		prevTx := prevTXs[hex.EncodeToString(vin.TxID)]
+		txCopy.Vin[inID].Signature = nil
+		txCopy.Vin[inID].PubKey = prevTx.Vout[vin.Vout].PubKeyHash
+
+		r := big.Int{}
+		s := big.Int{}
+		sigLen := len(vin.Signature)
+		r.SetBytes(vin.Signature[:(sigLen / 2)])
+		s.SetBytes(vin.Signature[(sigLen / 2):])
+
+		x := big.Int{}
+		y := big.Int{}
+		keyLen := len(vin.PubKey)
+		x.SetBytes(vin.PubKey[:(keyLen / 2)])
+		y.SetBytes(vin.PubKey[(keyLen / 2):])
+
+		dataToVerify := fmt.Sprintf("%x\n", txCopy)
+
+		rawPubKey := ecdsa.PublicKey{Curve: curve, X: &x, Y: &y}
+		if ecdsa.Verify(&rawPubKey, []byte(dataToVerify), &r, &s) == false {
+			return false
+		}
+		txCopy.Vin[inID].PubKey = nil
+	}
+
+	return true
+}
+
+type TxOutPuts struct {
+	Outputs []TxOutput
+}
+
+func (outs *TxOutPuts) Serialize() []byte{
+	var buf bytes.Buffer
+
+	enc := gob.NewEncoder(&buf)
+	err := enc.Encode(outs)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return buf.Bytes()
+}
+
+func DeserializeOutPuts(data []byte) TxOutPuts {
+	var out TxOutPuts
+	dec := gob.NewDecoder(bytes.NewReader(data))
+	err := dec.Decode(&out)
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return out
 }
