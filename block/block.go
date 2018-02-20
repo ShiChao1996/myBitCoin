@@ -34,7 +34,7 @@ import (
 	"encoding/gob"
 	"bytes"
 	"myBitCoin/transaction"
-	"crypto/sha256"
+	"myBitCoin/merkle"
 )
 
 type Block struct {
@@ -82,15 +82,11 @@ func DeSerialize(b []byte) *Block {
 }
 
 func (b *Block) HashTransactions() []byte {
-	var (
-		tr     [][]byte
-		hashed [32]byte
-	)
+	var tr [][]byte
 
 	for _, t := range b.Transactions {
-		tr = append(tr, t.ID)
+		tr = append(tr, t.Serialize())
 	}
-	hashed = sha256.Sum256(bytes.Join(tr, []byte{}))
-
-	return hashed[:]
+	hashed := merkle.NewMerkleTree(tr)
+	return hashed.RootNode.Data
 }

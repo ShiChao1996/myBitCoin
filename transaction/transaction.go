@@ -117,6 +117,17 @@ func (tx *Transaction) IsCoinbase() bool {
 	return len(tx.Vin) == 1 && len(tx.Vin[0].TxID) == 0 && tx.Vin[0].Vout == -1
 }
 
+func (tx *Transaction)Serialize() []byte{
+	var encoded bytes.Buffer
+	encoder := gob.NewEncoder(&encoded)
+	err := encoder.Encode(tx)
+	if err!=nil{
+		log.Panic(err)
+	}
+
+	return encoded.Bytes()
+}
+
 /*func (in *TxInput) CanUnlockOutputWith(unlockingData string) bool {
 	return in.ScriptSig == unlockingData
 }

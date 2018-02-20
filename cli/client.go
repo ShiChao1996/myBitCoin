@@ -62,13 +62,6 @@ func (cli *Client) validateArgs() {
 	}
 }
 
-func (cli *Client) createBlockchain(address, nodeID string) {
-	fmt.Println("creating blockchain...")
-	bc := blk.CreateBlockChain(address, nodeID)
-	bc.DB.Close()
-	fmt.Println("Done!")
-}
-
 /*
 func (cli *Client) Run() {
 	cli.validateArgs()
@@ -248,6 +241,7 @@ func (cli *Client) Send(from, to, nodeID string, amount int) {
 	}
 
 	bc := blk.NewBlockChain(nodeID)
+	utxoSet := utxo.UTXOSet{bc}
 	defer bc.DB.Close()
 
 	wallets, err := wallet.NewWallets(nodeID)
@@ -256,8 +250,10 @@ func (cli *Client) Send(from, to, nodeID string, amount int) {
 	}
 	wlt := wallets.GetWallet(from)
 	tx := bc.NewUTXOTransaction(wlt, to, amount)
+	utxoSet.BlockChain.SignTransactions(tx, wlt.PrivateKey)
 
-	bc.AddBlock([]*transaction.Transaction{tx})
+	newBlock := bc.MineBlock([]*transaction.Transaction{tx})
+	utxoSet.Update(newBlock)
 	fmt.Println("Success!")
 }
 
@@ -268,4 +264,16 @@ func (cli *Client) createWallet(nodeID string) {
 	wallets.SaveToFile(nodeID)
 
 	fmt.Printf("Your new address: %s\n", address)
+}
+
+func (cli *Client) createBlockchain(address, nodeID string) {
+	if !wallet.ValidateAddress(address) {
+		log.Panic("ERROR: Address is not valid")
+	}
+	bc := blk.CreateBlockChain(address, nodeID)
+	defer bc.DB.Close()
+	UTXOSet := utxo.UTXOSet{bc}
+	UTXOSet.Reindex()
+
+	fmt.Println("Done!")
 }

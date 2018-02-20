@@ -143,6 +143,47 @@ func (c *BlockChain) AddBlock(transactions []*transaction.Transaction) {
 	})
 }
 
+func (c *BlockChain) MineBlock(transactions []*transaction.Transaction) *Block {
+	var (
+		lastHash []byte
+	)
+
+	db := c.DB
+	err := db.View(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(blocksBucket))
+		lastHash = bucket.Get([]byte("l"))
+
+		//lastBlock := bucket.Get(lastHash)
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	newBlock := NewBlock(transactions, lastHash)
+
+	err = db.Update(func(tx *bolt.Tx) error {
+		bucket := tx.Bucket([]byte(blocksBucket))
+		err := bucket.Put(newBlock.Hash, newBlock.Serialize())
+		if err != nil {
+			log.Panic(err)
+		}
+
+		err = bucket.Put([]byte("l"), newBlock.Hash)
+		if err != nil {
+			log.Panic(err)
+		}
+		c.tip = lastHash
+
+		return nil
+	})
+	if err != nil {
+		log.Panic(err)
+	}
+
+	return newBlock
+}
+
 // FindTransaction finds a transaction by its ID
 func (bc *BlockChain) FindTransaction(ID []byte) (transaction.Transaction, error) {
 	bci := bc.Iterator()
@@ -313,6 +354,7 @@ func (c *BlockChain) NewUTXOTransaction(wlt *wallet.Wallet, to string, amount in
 
 	pubKeyHash := wallet.HashPubKey(wlt.PublicKey)
 	acc, validOuts := c.FindSpendableOutputs(pubKeyHash, amount)
+	//acc, validOuts := utxo.FindSpendableOutputs(pubKeyHash, amount)
 	if acc < amount {
 		log.Panic("ERROR: Not enough funds")
 	}
@@ -327,7 +369,7 @@ func (c *BlockChain) NewUTXOTransaction(wlt *wallet.Wallet, to string, amount in
 	}
 
 	from := wlt.GetAddress()
-	outputs = append(outputs, transaction.NewTxOut(amount,to))
+	outputs = append(outputs, transaction.NewTxOut(amount, to))
 	if acc > amount {
 		delta := acc - amount
 		outputs = append(outputs, transaction.NewTxOut(delta, string(from)))
@@ -339,27 +381,27 @@ func (c *BlockChain) NewUTXOTransaction(wlt *wallet.Wallet, to string, amount in
 	return tx
 }
 
-func (bc *BlockChain)SignTransactions(tx transaction.Transaction, private ecdsa.PrivateKey)  {
+func (bc *BlockChain) SignTransactions(tx *transaction.Transaction, private ecdsa.PrivateKey) {
 	prevTxs := make(map[string]transaction.Transaction)
 
-	for _,in := range tx.Vin{
-		prev,err := bc.FindTransaction(in.TxID)
-		if err != nil{
+	for _, in := range tx.Vin {
+		prev, err := bc.FindTransaction(in.TxID)
+		if err != nil {
 			log.Panic(err)
 		}
 		id := hex.EncodeToString(in.TxID)
 		prevTxs[id] = prev
 	}
 
-	tx.Sign(private,prevTxs)
+	tx.Sign(private, prevTxs)
 }
 
-func (bc *BlockChain) VerifyTransaction(tr *transaction.Transaction)bool {
+func (bc *BlockChain) VerifyTransaction(tr *transaction.Transaction) bool {
 	prevTxs := make(map[string]transaction.Transaction)
 
-	for _,in := range tr.Vin{
-		prev,err := bc.FindTransaction(in.TxID)
-		if err != nil{
+	for _, in := range tr.Vin {
+		prev, err := bc.FindTransaction(in.TxID)
+		if err != nil {
 			log.Panic(err)
 		}
 		id := hex.EncodeToString(in.TxID)

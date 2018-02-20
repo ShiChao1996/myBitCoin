@@ -139,32 +139,36 @@ func (utxo *UTXOSet) Reindex() {
 		return nil
 	})
 }
-
+/*
 func (utxo *UTXOSet) Update(block *blk.Block) {
 	db := utxo.BlockChain.DB
 
 	err := db.Update(func(tx *bolt.Tx) error {
 		bucket := tx.Bucket([]byte(utxoBucket))
+
 		for _, tr := range block.Transactions {
-			for _, in := range tr.Vin {
-				updatedUotputs := transaction.TxOutPuts{}
-				outputs := transaction.DeserializeOutPuts(bucket.Get(tr.ID))
+			if tr.IsCoinbase() == false {
+				for _, in := range tr.Vin {
+					updatedOutputs := transaction.TxOutPuts{}
+					outputBytes := bucket.Get(in.TxID)
+					outputs := transaction.DeserializeOutPuts(outputBytes)
 
-				for outIdx, out := range outputs.Outputs {
-					if outIdx != in.Vout {
-						updatedUotputs.Outputs = append(updatedUotputs.Outputs, out)
+					for outIdx, out := range outputs.Outputs {
+						if outIdx != in.Vout {
+							updatedOutputs.Outputs = append(updatedOutputs.Outputs, out)
+						}
 					}
-				}
 
-				if len(updatedUotputs.Outputs) == 0 {
-					err := bucket.Delete(in.TxID)
-					if err != nil {
-						log.Panic(err)
-					}
-				} else {
-					err := bucket.Put(in.TxID, updatedUotputs.Serialize())
-					if err != nil {
-						log.Panic(err)
+					if len(updatedOutputs.Outputs) == 0 {
+						err := bucket.Delete(in.TxID)
+						if err != nil {
+							log.Panic(err)
+						}
+					} else {
+						err := bucket.Put(in.TxID, updatedOutputs.Serialize())
+						if err != nil {
+							log.Panic(err)
+						}
 					}
 				}
 			}
@@ -182,6 +186,58 @@ func (utxo *UTXOSet) Update(block *blk.Block) {
 		return nil
 	})
 
+	if err != nil {
+		log.Panic(err)
+	}
+}*/
+
+func (u UTXOSet) Update(block *blk.Block) {
+	db := u.BlockChain.DB
+
+	err := db.Update(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(utxoBucket))
+
+		for _, tr := range block.Transactions {
+			if tr.IsCoinbase() == false {
+				for _, vin := range tr.Vin {
+					updatedOuts := transaction.TxOutPuts{}
+					outsBytes := b.Get(vin.TxID)
+					outs := transaction.DeserializeOutPuts(outsBytes)
+
+					for outIdx, out := range outs.Outputs {
+						if outIdx != vin.Vout {
+							updatedOuts.Outputs = append(updatedOuts.Outputs, out)
+						}
+					}
+
+					if len(updatedOuts.Outputs) == 0 {
+						err := b.Delete(vin.TxID)
+						if err != nil {
+							log.Panic(err)
+						}
+					} else {
+						err := b.Put(vin.TxID, updatedOuts.Serialize())
+						if err != nil {
+							log.Panic(err)
+						}
+					}
+
+				}
+			}
+
+			newOutputs := transaction.TxOutPuts{}
+			for _, out := range tr.Vout {
+				newOutputs.Outputs = append(newOutputs.Outputs, out)
+			}
+
+			err := b.Put(tr.ID, newOutputs.Serialize())
+			if err != nil {
+				log.Panic(err)
+			}
+		}
+
+		return nil
+	})
 	if err != nil {
 		log.Panic(err)
 	}
